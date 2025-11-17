@@ -4,15 +4,15 @@ FROM python:3.10
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements file and main.py into the container
-COPY requirements.txt .
-COPY main.py .
+# Copy all files
+COPY . .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose the port FastAPI will run on
-EXPOSE 8000
+EXPOSE 8003
 
 # Set the command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8003"]
+
