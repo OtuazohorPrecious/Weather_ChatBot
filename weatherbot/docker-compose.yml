@@ -1,0 +1,116 @@
+version: '3.8'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORS — add to anomaly_detection_service/app.py AND logging_service/app.py
+# Paste immediately after the `app = FastAPI(...)` line in each file.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# from fastapi.middleware.cors import CORSMiddleware
+#
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["http://localhost:3000"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+
+services:
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    ports:
+      - "3000:3000"
+    environment:
+
+      - ANOMALY_API_URL=http://localhost:8002
+      - LOGGING_API_URL=http://localhost:8004
+    depends_on:
+      - anomaly_detection_service
+      - logging_service
+  weather_service:
+    build: ./weather_service
+    container_name: weather_service
+    ports:
+      - "8001:8001"
+    environment:
+      - API_KEY=${API_KEY}
+    restart: "no"
+    cap_add:
+    - NET_ADMIN
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - weather_service
+    restart: "no"
+  
+  
+  anomaly_detection_service:
+   build: ./anomaly_detection_service
+   container_name: anomaly_detection_service
+   ports: ["8002:8002"]
+   environment: 
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@log_db/logdb"
+   depends_on: 
+    log_db:
+     condition: service_healthy
+    logging_service:
+     condition: service_started
+
+  nlu_service:
+   build: ./nlu_service
+   container_name: nlu_service
+   ports: ["8005:8005"]
+
+  responder_service:
+    build: ./responder_service
+    container_name: responder_service
+    ports: ["8007:8007"]
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+
+  log_db:
+    image: postgres:15-alpine
+    container_name: log_db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: logdb
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "8009:5432"  
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  logging_service:
+    build: ./logging_service
+    container_name: logging_service
+    ports:
+      - "8004:8004"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      log_db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@log_db/logdb"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+volumes:
+  postgres_data:
